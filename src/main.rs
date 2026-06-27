@@ -18,7 +18,9 @@ fn main() {
 
     // JSON batch mode
     if args_slice[0] == "--json" {
-        run_batch();
+        let input_file = args_slice.get(1).map(|s| s.as_str());
+        let output_file = args_slice.get(2).map(|s| s.as_str());
+        run_batch(input_file, output_file);
         return;
     }
 
@@ -213,12 +215,21 @@ fn build_regex(pattern: &str, flags: &RegexFlags) -> Option<Regex> {
 
 // --- JSON batch mode ---
 
-fn run_batch() {
-    let mut input = String::new();
-    io::stdin().read_to_string(&mut input).unwrap_or_else(|e| {
-        eprintln!("Error reading stdin: {}", e);
-        process::exit(1);
-    });
+fn run_batch(input_file: Option<&str>, output_file: Option<&str>) {
+    // Read input from file or stdin
+    let input = if let Some(path) = input_file {
+        std::fs::read_to_string(path).unwrap_or_else(|e| {
+            eprintln!("Error reading file {:?}: {}", path, e);
+            process::exit(1);
+        })
+    } else {
+        let mut buf = String::new();
+        io::stdin().read_to_string(&mut buf).unwrap_or_else(|e| {
+            eprintln!("Error reading stdin: {}", e);
+            process::exit(1);
+        });
+        buf
+    };
 
     let commands: Vec<Value> = match serde_json::from_str(&input) {
         Ok(Value::Array(arr)) => arr,
@@ -239,7 +250,17 @@ fn run_batch() {
         results.push(result);
     }
 
-    println!("{}", serde_json::to_string(&results).unwrap());
+    let output = serde_json::to_string(&results).unwrap();
+
+    // Write output to file or stdout
+    if let Some(path) = output_file {
+        std::fs::write(path, &output).unwrap_or_else(|e| {
+            eprintln!("Error writing file {:?}: {}", path, e);
+            process::exit(1);
+        });
+    } else {
+        println!("{}", output);
+    }
 }
 
 fn execute_one(entry: &Value) -> Value {
@@ -364,7 +385,9 @@ Usage:
     regex split    <string> <pattern> [<flags>]
     regex sub      <string> <pattern> <replacement> [<flags>]
 
-    regex --json   (read JSON array from stdin, write JSON array to stdout)
+    regex --json                          (read from stdin, write to stdout)
+    regex --json <input_file>             (read from file, write to stdout)
+    regex --json <input_file> <output_file>  (read from file, write to file)
 
 Exit codes:
     0  success

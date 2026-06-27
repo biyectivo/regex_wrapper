@@ -107,10 +107,25 @@ regex search "test" "[invalid"
 
 ### JSON batch mode
 
-Pipe a JSON array to stdin with the `--json` flag. Each element is an object describing one operation. Returns a JSON array of results on stdout.
+Pass a JSON array with the `--json` flag. Each element is an object describing one operation. Returns a JSON array of results.
+
+```
+regex --json                             # read from stdin, write to stdout
+regex --json <input_file>                # read from file, write to stdout
+regex --json <input_file> <output_file>  # read from file, write to file
+```
+
+**Examples:**
 
 ```bash
+# Pipe from stdin (original behavior)
 echo '[{"instruction":"search","string":"hello world","pattern":"\\w+"},{"instruction":"findall","string":"one 1 two 2","pattern":"\\d+"}]' | regex --json
+
+# Read from a file
+regex --json commands.json
+
+# Read from a file, write results to a file
+regex --json commands.json results.json
 ```
 
 Output:
@@ -134,7 +149,8 @@ Output:
 
 - Invalid regex returns `false` for that entry
 - Unknown instruction returns `{"error": "..."}`
-- Invalid JSON on stdin prints an error to stderr and exits with code 1
+- Invalid JSON on stdin/in file prints an error to stderr and exits with code 1
+- Non-existent input file prints an error to stderr and exits with code 1
 
 ## Debug logging
 
