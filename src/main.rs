@@ -95,8 +95,7 @@ fn main() {
             }
         }
         "findall" => {
-            let matches: Vec<&str> = compiled.find_iter(string).map(|m| m.as_str()).collect();
-            let result = format!("{:?}", matches);
+            let result = findall_python_style(&compiled, string);
             println!("{}", result);
             debug_log_cli(args_slice, &result);
         }
@@ -213,6 +212,60 @@ fn build_regex(pattern: &str, flags: &RegexFlags) -> Option<Regex> {
     Regex::new(&full_pattern).ok()
 }
 
+/// Python-style findall: if no capture groups, return full matches.
+/// If one capture group, return a flat list of that group's matches.
+/// If multiple capture groups, return a list of arrays (one per match).
+fn findall_python_style(re: &Regex, string: &str) -> String {
+    let num_groups = re.captures_len() - 1; // captures_len() includes group 0
+
+    if num_groups == 0 {
+        let matches: Vec<&str> = re.find_iter(string).map(|m| m.as_str()).collect();
+        format!("{:?}", matches)
+    } else if num_groups == 1 {
+        let matches: Vec<&str> = re
+            .captures_iter(string)
+            .filter_map(|caps| caps.get(1).map(|m| m.as_str()))
+            .collect();
+        format!("{:?}", matches)
+    } else {
+        let matches: Vec<Vec<&str>> = re
+            .captures_iter(string)
+            .map(|caps| {
+                (1..=num_groups)
+                    .map(|i| caps.get(i).map(|m| m.as_str()).unwrap_or(""))
+                    .collect()
+            })
+            .collect();
+        format!("{:?}", matches)
+    }
+}
+
+/// Same logic as above but returns a serde_json::Value for batch mode.
+fn findall_python_style_json(re: &Regex, string: &str) -> Value {
+    let num_groups = re.captures_len() - 1;
+
+    if num_groups == 0 {
+        let matches: Vec<&str> = re.find_iter(string).map(|m| m.as_str()).collect();
+        json!(matches)
+    } else if num_groups == 1 {
+        let matches: Vec<&str> = re
+            .captures_iter(string)
+            .filter_map(|caps| caps.get(1).map(|m| m.as_str()))
+            .collect();
+        json!(matches)
+    } else {
+        let matches: Vec<Vec<&str>> = re
+            .captures_iter(string)
+            .map(|caps| {
+                (1..=num_groups)
+                    .map(|i| caps.get(i).map(|m| m.as_str()).unwrap_or(""))
+                    .collect()
+            })
+            .collect();
+        json!(matches)
+    }
+}
+
 // --- JSON batch mode ---
 
 fn run_batch(input_file: Option<&str>, output_file: Option<&str>) {
@@ -310,8 +363,7 @@ fn execute_one(entry: &Value) -> Value {
             }
         }
         "findall" => {
-            let matches: Vec<&str> = compiled.find_iter(string).map(|m| m.as_str()).collect();
-            json!(matches)
+            findall_python_style_json(&compiled, string)
         }
         "split" => {
             let parts: Vec<&str> = compiled.split(string).collect();
