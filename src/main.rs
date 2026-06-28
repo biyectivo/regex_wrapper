@@ -297,9 +297,11 @@ fn run_batch(input_file: Option<&str>, output_file: Option<&str>) {
     };
 
     let mut results: Vec<Value> = Vec::with_capacity(commands.len());
+    let mut prev_result: Option<Value> = None;
     for entry in &commands {
-        let result = execute_one(entry);
+        let result = execute_one(entry, prev_result.as_ref());
         debug_log_batch(entry, &result);
+        prev_result = Some(result.clone());
         results.push(result);
     }
 
@@ -316,29 +318,12 @@ fn run_batch(input_file: Option<&str>, output_file: Option<&str>) {
     }
 }
 
-fn execute_one(entry: &Value) -> Value {
+fn execute_one(entry: &Value, prev_result: Option<&Value>) -> Value {
     let instruction = entry
         .get("instruction")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_lowercase();
-
-    // Read string from file if string_file is provided, otherwise use string
-    let string_owned: String;
-    let string = if let Some(path) = entry.get("string_file").and_then(|v| v.as_str()) {
-        match std::fs::read_to_string(path) {
-            Ok(contents) => {
-                string_owned = contents;
-                string_owned.as_str()
-            }
-            Err(e) => return json!({"error": format!("Error reading string_file {:?}: {}", path, e)}),
-        }
-    } else {
-        entry
-            .get("string")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-    };
     let pattern = entry
         .get("pattern")
         .and_then(|v| v.as_str())
@@ -367,7 +352,57 @@ fn execute_one(entry: &Value) -> Value {
         None => return json!(false),
     };
 
-    match instruction.as_str() {
+    // Resolve the input string: string_file > string with $PREV$ substitution
+    if let Some(path) = entry.get("string_file").and_then(|v| v.as_str()) {
+        match std::fs::read_to_string(path) {
+            Ok(contents) => return run_regex(&instruction, &contents, &compiled, replacement),
+            Err(e) => return json!({"error": format!("Error reading string_file {:?}: {}", path, e)}),
+        }
+    }
+
+    let raw = entry
+        .get("string")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    if !raw.contains("$PREV$") {
+        return run_regex(&instruction, raw, &compiled, replacement);
+    }
+
+    // $PREV$ handling
+    match prev_result {
+        None => json!({"error": "$PREV$ used but no previous result available"}),
+        // Array: if string is exactly "$PREV$", map the operation over each element
+        Some(Value::Array(arr)) if raw == "$PREV$" => {
+            let mapped: Vec<Value> = arr
+                .iter()
+                .map(|elem| {
+                    let s = match elem {
+                        Value::String(s) => s.clone(),
+                        other => serde_json::to_string(other).unwrap_or_default(),
+                    };
+                    run_regex(&instruction, &s, &compiled, replacement)
+                })
+                .collect();
+            json!(mapped)
+        }
+        // String: substitute $PREV$ with the string value
+        Some(Value::String(s)) => {
+            let resolved = raw.replace("$PREV$", s);
+            run_regex(&instruction, &resolved, &compiled, replacement)
+        }
+        // Anything else (number, bool, object, or array with embedded $PREV$): stringify
+        Some(other) => {
+            let serialized = serde_json::to_string(other).unwrap_or_default();
+            let resolved = raw.replace("$PREV$", &serialized);
+            run_regex(&instruction, &resolved, &compiled, replacement)
+        }
+    }
+}
+
+/// Execute a regex operation on a single string.
+fn run_regex(instruction: &str, string: &str, compiled: &Regex, replacement: &str) -> Value {
+    match instruction {
         "search" => {
             if let Some(m) = compiled.find(string) {
                 json!(m.start())
@@ -375,9 +410,7 @@ fn execute_one(entry: &Value) -> Value {
                 json!(-1)
             }
         }
-        "findall" => {
-            findall_python_style_json(&compiled, string)
-        }
+        "findall" => findall_python_style_json(compiled, string),
         "split" => {
             let parts: Vec<&str> = compiled.split(string).collect();
             json!(parts)

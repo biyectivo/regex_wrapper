@@ -161,11 +161,43 @@ Use `string_file` instead of `string` to read the target string from a file. Thi
 
 If both `string` and `string_file` are provided, `string_file` takes priority. If the file cannot be read, the entry returns `{"error": "..."}`.
 
+**Chaining with `$PREV$`:**
+
+Use `$PREV$` in the `string` field to reference the result of the previous entry. This lets you chain multiple regex operations together:
+
+```json
+[
+  {
+    "instruction": "sub",
+    "string_file": "page.html",
+    "pattern": "(\"[^\"]*\")| ",
+    "replacement": "${1}¬"
+  },
+  {
+    "instruction": "sub",
+    "string": "$PREV$",
+    "pattern": "'([^'¬]*)¬([^']*)'",
+    "replacement": "'$1 $2'"
+  },
+  {
+    "instruction": "sub",
+    "string": "$PREV$",
+    "pattern": "'([^'¬]*)¬([^']*)'",
+    "replacement": "'$1 $2'"
+  }
+]
+```
+
+`$PREV$` can also appear as part of a larger string (e.g. `"prefix$PREV$suffix"`). For string results (from `sub`), `$PREV$` expands to the raw string. For non-string results (from `findall`, `split`, `search`), it expands to their JSON representation.
+
+Using `$PREV$` on the first entry (no previous result) returns `{"error": "..."}`.
+
 **Error handling in batch mode:**
 
 - Invalid regex returns `false` for that entry
 - Unknown instruction returns `{"error": "..."}`
 - Unreadable `string_file` returns `{"error": "..."}`
+- `$PREV$` on first entry returns `{"error": "..."}`
 - Invalid JSON on stdin/in file prints an error to stderr and exits with code 1
 - Non-existent input file prints an error to stderr and exits with code 1
 
