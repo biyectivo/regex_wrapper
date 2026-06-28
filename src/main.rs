@@ -322,10 +322,23 @@ fn execute_one(entry: &Value) -> Value {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_lowercase();
-    let string = entry
-        .get("string")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+
+    // Read string from file if string_file is provided, otherwise use string
+    let string_owned: String;
+    let string = if let Some(path) = entry.get("string_file").and_then(|v| v.as_str()) {
+        match std::fs::read_to_string(path) {
+            Ok(contents) => {
+                string_owned = contents;
+                string_owned.as_str()
+            }
+            Err(e) => return json!({"error": format!("Error reading string_file {:?}: {}", path, e)}),
+        }
+    } else {
+        entry
+            .get("string")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+    };
     let pattern = entry
         .get("pattern")
         .and_then(|v| v.as_str())

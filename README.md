@@ -58,12 +58,12 @@ regex sub <string> <pattern> <replacement> [<flags>]
 
 **Instructions:**
 
-| Instruction | Description | Output |
-|---|---|---|
-| `search` | Find first match | Start index (>= 0) or `-1` if no match |
-| `findall` | Find all matches | JSON array of matched strings |
-| `split` | Split string by pattern | JSON array of parts |
-| `sub` | Substitute matches | Resulting string |
+| Instruction | Description             | Output                                 |
+| -------------| -------------------------| ----------------------------------------|
+| `search`    | Find first match        | Start index (>= 0) or `-1` if no match |
+| `findall`   | Find all matches        | JSON array of matched strings          |
+| `split`     | Split string by pattern | JSON array of parts                    |
+| `sub`       | Substitute matches      | Resulting string                       |
 
 **Flags** (optional, 4th or 5th argument):
 
@@ -139,16 +139,33 @@ Output:
 {
   "instruction": "search|findall|split|sub",
   "string": "target string",
+  "string_file": "path/to/file.txt (alternative to string)",
   "pattern": "regex pattern",
   "flags": "optional flags string",
   "replacement": "required for sub"
 }
 ```
 
+Use `string_file` instead of `string` to read the target string from a file. This avoids shell and JSON escaping issues when processing content like HTML:
+
+```json
+[
+  {
+    "instruction": "sub",
+    "string_file": "page.html",
+    "pattern": "(\"[^\"]*\")| ",
+    "replacement": "${1}¬"
+  }
+]
+```
+
+If both `string` and `string_file` are provided, `string_file` takes priority. If the file cannot be read, the entry returns `{"error": "..."}`.
+
 **Error handling in batch mode:**
 
 - Invalid regex returns `false` for that entry
 - Unknown instruction returns `{"error": "..."}`
+- Unreadable `string_file` returns `{"error": "..."}`
 - Invalid JSON on stdin/in file prints an error to stderr and exits with code 1
 - Non-existent input file prints an error to stderr and exits with code 1
 
