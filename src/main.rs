@@ -39,25 +39,46 @@ fn main() {
         process::exit(1);
     }
 
-    let string = &args_slice[1];
-    let pattern = &args_slice[2];
+    // Check for --file flag: regex <instruction> --file <filepath> <pattern> ...
+    let (string_owned, rest_args) = if args_slice.get(1).map(|s| s.as_str()) == Some("--file") {
+        if args_slice.len() < 4 {
+            eprintln!("--file requires <filepath> and <pattern> arguments.");
+            process::exit(1);
+        }
+        let filepath = &args_slice[2];
+        let contents = std::fs::read_to_string(filepath).unwrap_or_else(|e| {
+            eprintln!("Error reading file {:?}: {}", filepath, e);
+            process::exit(1);
+        });
+        (contents, &args_slice[3..])
+    } else {
+        (args_slice[1].clone(), &args_slice[2..])
+    };
+    let string = string_owned.as_str();
+
+    // rest_args: <pattern> [<replacement>] [<flags>]
+    if rest_args.is_empty() {
+        eprintln!("Missing <pattern> argument.");
+        process::exit(1);
+    }
+    let pattern = &rest_args[0];
 
     // For "sub" we need an extra <replacement> argument before optional flags
     let (replacement, flags_str) = if instruction == "sub" {
-        if args_slice.len() < 4 {
+        if rest_args.len() < 2 {
             eprintln!("'sub' requires a <replacement> argument after <pattern>.");
             process::exit(1);
         }
-        let repl = &args_slice[3];
-        let flags = if args_slice.len() > 4 {
-            &args_slice[4]
+        let repl = &rest_args[1];
+        let flags = if rest_args.len() > 2 {
+            &rest_args[2]
         } else {
             ""
         };
         (repl.as_str(), flags)
     } else {
-        let flags = if args_slice.len() > 3 {
-            args_slice[3].as_str()
+        let flags = if rest_args.len() > 1 {
+            rest_args[1].as_str()
         } else {
             ""
         };
@@ -482,6 +503,9 @@ Usage:
     regex findall  <string> <pattern> [<flags>]
     regex split    <string> <pattern> [<flags>]
     regex sub      <string> <pattern> <replacement> [<flags>]
+
+    Use --file <path> instead of <string> to read from a file:
+    regex sub --file input.html <pattern> <replacement> [<flags>]
 
     regex --json                          (read from stdin, write to stdout)
     regex --json <input_file>             (read from file, write to stdout)

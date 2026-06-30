@@ -54,6 +54,10 @@ For CI, use a GitHub Actions matrix with `windows-latest`, `ubuntu-latest`, `mac
 ```
 regex <instruction> <string> <pattern> [<flags>]
 regex sub <string> <pattern> <replacement> [<flags>]
+
+# Use --file to read the target string from a file instead:
+regex <instruction> --file <path> <pattern> [<flags>]
+regex sub --file <path> <pattern> <replacement> [<flags>]
 ```
 
 **Instructions:**
@@ -103,6 +107,9 @@ regex search "Hello World" "hello" i
 
 regex search "test" "[invalid"
 # Output: False
+
+# Read target string from a file (avoids shell escaping issues with HTML, etc.)
+regex sub --file page.html '("[^"]*")| ' '${1}¬'
 ```
 
 ### JSON batch mode
