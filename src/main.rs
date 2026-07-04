@@ -102,8 +102,7 @@ fn main() {
             process::exit(1);
         }
     };
-
-    // Dispatch
+    
     match instruction.as_str() {
         "search" => {
             if let Some(m) = compiled.find(string) {
@@ -116,7 +115,7 @@ fn main() {
             }
         }
         "findall" => {
-            let result = findall_python_style(&compiled, string);
+            let result = findall(&compiled, string);
             println!("{}", result);
             debug_log_cli(args_slice, &result);
         }
@@ -135,7 +134,7 @@ fn main() {
     }
 }
 
-/// Flags parsed from the flag string, used to build the regex pattern with inline flags.
+/// Flags
 struct RegexFlags {
     case_insensitive: bool,
     multi_line: bool,
@@ -151,7 +150,7 @@ impl RegexFlags {
             multi_line: false,
             dot_matches_newline: false,
             verbose: false,
-            unicode: true, // Rust regex is Unicode by default
+            unicode: true,
         }
     }
 
@@ -171,7 +170,6 @@ impl RegexFlags {
             flags.push('x');
         }
         if !self.unicode {
-            // Disable unicode with (?-u)
             if flags.is_empty() {
                 return "(?-u)".to_string();
             } else {
@@ -192,10 +190,8 @@ fn parse_flags(flag_str: &str) -> Result<RegexFlags, String> {
         return Ok(flags);
     }
 
-    // Shorthand single-letter map
+    // chars support...
     let shorthand_chars = "imsxau";
-
-    // If every character is a known shorthand letter, treat as shorthand
     if flag_str.chars().all(|c| shorthand_chars.contains(c)) {
         for ch in flag_str.chars() {
             match ch {
@@ -233,10 +229,10 @@ fn build_regex(pattern: &str, flags: &RegexFlags) -> Option<Regex> {
     Regex::new(&full_pattern).ok()
 }
 
-/// Python-style findall: if no capture groups, return full matches.
-/// If one capture group, return a flat list of that group's matches.
+/// if no capture groups, return full matches.
+/// If one capture group, return a list of that group's matches.
 /// If multiple capture groups, return a list of arrays (one per match).
-fn findall_python_style(re: &Regex, string: &str) -> String {
+fn findall(re: &Regex, string: &str) -> String {
     let num_groups = re.captures_len() - 1; // captures_len() includes group 0
 
     if num_groups == 0 {
@@ -262,7 +258,7 @@ fn findall_python_style(re: &Regex, string: &str) -> String {
 }
 
 /// Same logic as above but returns a serde_json::Value for batch mode.
-fn findall_python_style_json(re: &Regex, string: &str) -> Value {
+fn findall_json(re: &Regex, string: &str) -> Value {
     let num_groups = re.captures_len() - 1;
 
     if num_groups == 0 {
@@ -431,7 +427,7 @@ fn run_regex(instruction: &str, string: &str, compiled: &Regex, replacement: &st
                 json!(-1)
             }
         }
-        "findall" => findall_python_style_json(compiled, string),
+        "findall" => findall_json(compiled, string),
         "split" => {
             let parts: Vec<&str> = compiled.split(string).collect();
             json!(parts)
