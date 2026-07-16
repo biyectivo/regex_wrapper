@@ -8,7 +8,7 @@ Built in Rust for near-instant startup (~2-5ms) and small binary size (~1-3 MB).
 
 - Direct CLI access to a high-performance regex engine
 - JSON batch mode for multiple operations without repeated process startup
-- Compiles to a single statically-linked native executable (Windows, Linux, macOS)
+- Compiles to a single native executable (Windows, Linux, macOS)
 - Optional debug logging (timestamped args + results)
 - Invalid regex patterns return `False` instead of raising exceptions
 - Cross-platform: builds natively on Windows, Linux, and macOS
@@ -45,8 +45,6 @@ rustup target add x86_64-unknown-linux-gnu
 cargo build --release --target x86_64-unknown-linux-gnu
 ```
 
-For CI, use a GitHub Actions matrix with `windows-latest`, `ubuntu-latest`, `macos-latest`.
-
 ## Usage
 
 ### CLI mode
@@ -62,12 +60,22 @@ regex sub --file <path> <pattern> <replacement> [<flags>]
 
 **Instructions:**
 
-| Instruction | Description             | Output                                 |
-| -------------| -------------------------| ----------------------------------------|
-| `search`    | Find first match        | Start index (>= 0) or `-1` if no match |
-| `findall`   | Find all matches        | JSON array of matched strings          |
-| `split`     | Split string by pattern | JSON array of parts                    |
-| `sub`       | Substitute matches      | Resulting string                       |
+| Instruction | Description             | Output                                                    |
+| -------------| -------------------------| -----------------------------------------------------------|
+| `search`    | Find first match        | Start index (>= 0) or `-1` if no match                    |
+| `findall`   | Find all matches        | JSON array (format depends on capture groups - see below) |
+| `split`     | Split string by pattern | JSON array of parts                                       |
+| `sub`       | Substitute matches      | Resulting string                                          |
+
+**`findall` output with capture groups:**
+
+The output format of `findall` depends on the number of capture groups in the pattern. Named groups (`(?P<name>...)` or `(?<name>...)`) behave identically to unnamed groups (`(...)`) - the name does not appear in the output.
+
+| Capture groups in pattern | Output format | Example |
+|---|---|---|
+| None | Flat array of full matches | `["1", "2", "3"]` |
+| 1 group (named or not) | Flat array of that group's content | `["1", "2"]` |
+| 2+ groups (named or not) | Array of arrays (one tuple per match) | `[["555", "1234"], ["666", "5678"]]` |
 
 **Flags** (optional, 4th or 5th argument):
 
@@ -75,14 +83,14 @@ regex sub --file <path> <pattern> <replacement> [<flags>]
 - Named: `IGNORECASE|MULTILINE`
 - Prefixed: `re.IGNORECASE|re.MULTILINE`
 
-| Letter | Named | Effect |
-|---|---|---|
-| `i` | `IGNORECASE` | Case-insensitive matching |
-| `m` | `MULTILINE` | `^` and `$` match line boundaries |
-| `s` | `DOTALL` | `.` matches newline |
-| `x` | `VERBOSE` | Ignore whitespace and `#` comments in pattern |
-| `a` | `ASCII` | Disable Unicode matching (ASCII only) |
-| `u` | `UNICODE` | Enable Unicode matching (default) |
+| Letter | Named        | Effect                                        |
+| --------| --------------| -----------------------------------------------|
+| `i`    | `IGNORECASE` | Case-insensitive matching                     |
+| `m`    | `MULTILINE`  | `^` and `$` match line boundaries             |
+| `s`    | `DOTALL`     | `.` matches newline                           |
+| `x`    | `VERBOSE`    | Ignore whitespace and `#` comments in pattern |
+| `a`    | `ASCII`      | Disable Unicode matching (ASCII only)         |
+| `u`    | `UNICODE`    | Enable Unicode matching (default)             |
 
 **Examples:**
 
@@ -95,6 +103,22 @@ regex search "hello world" "xyz"
 
 regex findall "one 1 two 2 three 3" "\d+"
 # Output: ["1", "2", "3"]
+
+# One unnamed group - returns group content only
+regex findall "one 1 two 2" "(\d+)"
+# Output: ["1", "2"]
+
+# One named group - same as unnamed
+regex findall "one 1 two 2" "(?P<digits>\d+)"
+# Output: ["1", "2"]
+
+# Multiple groups - returns array of tuples
+regex findall "555-1234 666-5678" "(\d{3})-(\d{4})"
+# Output: [["555", "1234"], ["666", "5678"]]
+
+# Multiple named groups - same as unnamed
+regex findall "555-1234 666-5678" "(?P<area>\d{3})-(?P<num>\d{4})"
+# Output: [["555", "1234"], ["666", "5678"]]
 
 regex split "one,two,,three" ","
 # Output: ["one", "two", "", "three"]
@@ -229,7 +253,7 @@ Log format:
 
 ## Gotchas, tips, and caveats
 
-### Shell quoting (the biggest pitfall)
+### Shell quoting
 
 When calling the `.exe` from **PowerShell**, double quotes inside your string arguments may not be properly escaped on the command line that the executable receives. This is a known PowerShell-to-native-command issue.
 
@@ -261,12 +285,10 @@ When calling the `.exe` from **PowerShell**, double quotes inside your string ar
 
 This tool uses [Rust's regex crate](https://docs.rs/regex/latest/regex/#syntax), which supports most PCRE2 syntax but has some differences from Python's `re`:
 
-- **No lookahead/lookbehind** — the regex crate does not support `(?=...)`, `(?!...)`, `(?<=...)`, `(?<!...)` (for guaranteed linear-time matching).
-- **No backreferences** — `\1`, `\2` etc. are not supported in patterns.
-- **Named groups** — use `(?P<name>...)` (same as Python) or `(?<name>...)`.
-- **Substitution syntax** — use `$1`, `$2`, `${name}` (not `\1`, `\g<name>` as in Python).
-
-If you need lookahead/lookbehind or backreferences, consider using the `fancy-regex` crate instead (trade-off: slightly slower).
+- **No lookahead/lookbehind** - the regex crate does not support `(?=...)`, `(?!...)`, `(?<=...)`, `(?<!...)` (for guaranteed linear-time matching).
+- **No backreferences** - `\1`, `\2` etc. are not supported in patterns.
+- **Named groups** - use `(?P<name>...)` (same as Python) or `(?<name>...)`.
+- **Substitution syntax** - use `$1`, `$2`, `${name}` (not `\1`, `\g<name>` as in Python).
 
 ### Return values
 
@@ -277,32 +299,8 @@ If you need lookahead/lookbehind or backreferences, consider using the `fancy-re
 
 ### Performance
 
-- Startup time: ~2-5ms (vs ~300-500ms with PyInstaller, ~80-150ms with Nuitka)
-- Binary size: ~1-3 MB (statically linked, stripped)
-- The Rust regex crate guarantees linear-time matching — no catastrophic backtracking.
-- For multiple operations, use `--json` batch mode to avoid even the tiny per-invocation overhead.
-
-### Build optimization
-
-The `Cargo.toml` is configured for maximum performance in release builds:
-- `opt-level = 3` — full optimization
-- `lto = true` — link-time optimization across all crates
-- `codegen-units = 1` — single codegen unit for better optimization
-- `strip = true` — strip debug symbols for smaller binary
-
-## Project structure
-
-```
-regex_wrapper/
-  Cargo.toml              # Rust package manifest
-  src/
-    main.rs               # The CLI tool (source)
-  target/
-    release/
-      regex.exe           # Built executable (Windows)
-  README.md               # This file
-  regex_wrapper.log       # Debug log (created when REGEX_WRAPPER_DEBUG=1)
-```
+- Startup time: ~2-5ms
+- Binary size: ~1-3 MB
 
 ## License
 
